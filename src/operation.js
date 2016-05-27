@@ -79,12 +79,20 @@ function Operation() {
   };
 
   operation.fail = function fail(error) {
+    if (operation.guardOnlyCalledOnce) {
+      return;
+    }
+    operation.guardOnlyCalledOnce = true;
     operation.state = "failed";
     operation.error = error;
     operation.errorReactions.forEach(r => r(error));
   };
 
   operation.succeed = function succeed(result) {
+    if (operation.guardOnlyCalledOnce) {
+      return;
+    }
+    operation.guardOnlyCalledOnce = true;
     operation.state = "succeeded";
     operation.result = result;
     operation.successReactions.forEach(r => r(result));
@@ -104,7 +112,13 @@ function Operation() {
 
     function successHandler(result) {
       if (onSuccess) {
-        const callbackResult = onSuccess(result);
+        let callbackResult;
+        try {
+          callbackResult = onSuccess(result);
+        } catch (error) {
+          proxyOp.fail(error);
+          return
+        }
         proxyOp.resolve(callbackResult);
         return;
       }
@@ -113,7 +127,13 @@ function Operation() {
 
     function errorHandler(error) {
       if (onError) {
-        const callbackResult = onError(error);
+        let callbackResult;
+        try {
+          callbackResult = onError(error);
+        } catch (error) {
+          proxyOp.fail(error);
+          return;
+        }
         proxyOp.resolve(callbackResult);
         return;
       }
@@ -159,6 +179,65 @@ function fetchCurrentCityThatFails() {
   doLater(() => operation.fail("GPS broken"));
   return operation;
 }
+
+test("error recovery", function (done) {
+
+  fetchCurrentCity()
+    .then(function (city) {
+      throw new Error("Oh noes");
+      return fetchWeather(city);
+    })
+    .catch(e => done());
+
+});
+
+
+test("error, error recovery", function (done) {
+
+  fetchCurrentCity()
+    .then(function (city) {
+      throw new Error("Oh noes");
+      return fetchWeather(city);
+    })
+    .catch(function (error) {
+      throw new Error("Error from an error handler, ohhh my!");
+    })
+    .catch(e => done());
+
+});
+
+function fetchCurrentCityIndecisive() {
+  const operation = new Operation();
+  doLater(function () {
+    operation.succeed("NYC");
+    operation.succeed("Philly");
+  });
+  return operation;
+}
+
+test("protect from doubling up on success", function (done) {
+
+  fetchCurrentCityIndecisive()
+    .then(e => done());
+
+});
+
+function fetchCurrentCityRepeatedFailures() {
+  const operation = new Operation();
+  doLater(function () {
+    operation.fail(new Error("I failed"));
+    operation.fail(new Error("I failed again!"));
+  });
+  return operation;
+}
+
+test("protect from doubling up on failures", function (done) {
+
+  fetchCurrentCityRepeatedFailures()
+    .catch(e => done());
+
+});
+
 
 test("error recovery", function (done) {
 
