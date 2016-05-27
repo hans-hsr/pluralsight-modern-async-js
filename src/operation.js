@@ -111,33 +111,39 @@ function Operation() {
     const proxyOp = new Operation();
 
     function successHandler(result) {
-      if (onSuccess) {
-        let callbackResult;
-        try {
-          callbackResult = onSuccess(result);
-        } catch (error) {
-          proxyOp.fail(error);
-          return
+      doLater(function () {
+
+        if (onSuccess) {
+          let callbackResult;
+          try {
+            callbackResult = onSuccess(result);
+          } catch (error) {
+            proxyOp.fail(error);
+            return
+          }
+          proxyOp.resolve(callbackResult);
+          return;
         }
-        proxyOp.resolve(callbackResult);
-        return;
-      }
-      proxyOp.succeed(result);
+        proxyOp.succeed(result);
+
+      })
     }
 
     function errorHandler(error) {
-      if (onError) {
-        let callbackResult;
-        try {
-          callbackResult = onError(error);
-        } catch (error) {
-          proxyOp.fail(error);
+      doLater(function () {
+        if (onError) {
+          let callbackResult;
+          try {
+            callbackResult = onError(error);
+          } catch (error) {
+            proxyOp.fail(error);
+            return;
+          }
+          proxyOp.resolve(callbackResult);
           return;
         }
-        proxyOp.resolve(callbackResult);
-        return;
-      }
-      proxyOp.fail(error)
+        proxyOp.fail(error)
+      })
     }
 
     if (operation.state == "succeeded") {
@@ -179,6 +185,72 @@ function fetchCurrentCityThatFails() {
   doLater(() => operation.fail("GPS broken"));
   return operation;
 }
+
+function fetchCurrentCityMystery() {
+  var operation = new Operation();
+  console.log("Getting weather");
+  operation.succeed("New York, NY");
+  return operation;
+}
+function fetchWeatherMystery(city) {
+  var operation = new Operation();
+  operation.succeed({temp: 50});
+  return operation;
+}
+
+test("what does this print out?", function (done) {
+
+  fetchCurrentCity()
+    .then(fetchWeather)
+    .then(function (weather) {
+      console.log(weather);
+      done();
+    });
+
+  console.log("loading...");
+});
+
+
+test("ensure success handlers are always async", function (done) {
+
+  fetchCurrentCityMystery()
+    .then(fetchWeatherMystery)
+    .then(function (weather) {
+      console.log(weather);
+      doneAlias();
+    })
+    .catch(e => console.error(e));
+
+  const doneAlias = done;
+});
+
+test("ensure error handlers are always async", function (done) {
+
+  function fetchCityFailsSynchronously() {
+    var operation = new Operation();
+    operation.fail(new Error("oh no"));
+    return operation;
+  }
+
+  fetchCityFailsSynchronously()
+    .catch(city => doneAlias())
+    .catch(e => console.error(e));
+
+  const doneAlias = done;
+
+});
+
+test("what about this?", function (done) {
+
+  fetchCurrentCityMystery()
+    .then(fetchWeatherMystery)
+    .then(function (weather) {
+      console.log(weather);
+      done();
+    });
+
+  console.log("loading...");
+});
 
 test("error recovery", function (done) {
 
