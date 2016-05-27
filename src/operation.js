@@ -90,35 +90,53 @@ function Operation() {
     operation.successReactions.forEach(r => r(result));
   };
 
-  operation.onCompletion = function setCallbacks(onSuccess, onError) {
-    const noop = function () {};
-    const completionOp = new Operation();
+  operation.resolve = function (callbackResult) {
 
-    function successHandler() {
+    if (callbackResult && callbackResult.then) {
+      callbackResult.then(operation.succeed, operation.fail);
+    }
+    else operation.succeed(callbackResult);
+
+  };
+
+  operation.onCompletion = function setCallbacks(onSuccess, onError) {
+    const proxyOp = new Operation();
+
+    function successHandler(result) {
       if (onSuccess) {
-        const callbackResult = onSuccess(operation.result);
-        if (callbackResult && callbackResult.onCompletion) {
-          callbackResult.forwardCompletion(completionOp);
-        }
+        const callbackResult = onSuccess(result);
+        proxyOp.resolve(callbackResult);
+        return;
       }
+      proxyOp.succeed(result);
+    }
+
+    function errorHandler(error) {
+      if (onError) {
+        const callbackResult = onError(error);
+        proxyOp.resolve(callbackResult);
+        return;
+      }
+      proxyOp.fail(error)
     }
 
     if (operation.state == "succeeded") {
-      successHandler();
+      successHandler(operation.result);
     } else if (operation.state == "failed") {
-      onError(operation.error);
+      errorHandler(operation.error)
     } else {
       operation.successReactions.push(successHandler);
-      operation.errorReactions.push(onError || noop);
+      operation.errorReactions.push(errorHandler);
     }
 
-    return completionOp;
+    return proxyOp;
   };
   operation.then = operation.onCompletion;
 
   operation.onFailure = function onFailure(onError) {
     return operation.onCompletion(null, onError);
   };
+  operation.catch = operation.onFailure;
 
   operation.nodeCallback = function nodeCallback(error, result) {
     if (error) {
@@ -128,9 +146,6 @@ function Operation() {
     operation.succeed(result);
   };
 
-  operation.forwardCompletion = function (op) {
-    operation.onCompletion(op.succeed, op.fail);
-  };
 
   return operation;
 }
@@ -139,16 +154,73 @@ function doLater(func) {
   setTimeout(func, 1);
 }
 
+function fetchCurrentCityThatFails() {
+  var operation = new Operation();
+  doLater(() => operation.fail("GPS broken"));
+  return operation;
+}
+
+test("error recovery", function (done) {
+
+  fetchCurrentCityThatFails()
+    .catch(function (error) {
+      return "default city";
+    })
+    .then(function (city) {
+      expect(city).toBe("default city");
+      return fetchWeather(city);
+    })
+    .then(function (weather) {
+      console.log(weather);
+      done();
+    });
+
+});
+
+test("error recovery bypassed if not needed", function (done) {
+
+  fetchCurrentCity()
+    .catch(function (error) {
+      return "default city";
+    })
+    .then(function (city) {
+      expect(city).toNotBe("default city");
+      return fetchWeather(city);
+    })
+    .then(function (weather) {
+      console.log(weather);
+      done();
+    });
+
+});
+
+test("error fall through", function (done) {
+
+  const multiDone = callDone(done).afterTwoCalls();
+
+  fetchCurrentCityThatFails()
+    .then(function (city) {
+      return fetchWeather(city);
+    })
+    .catch(error => multiDone());
+
+  // catch responds to any upstream failure
+  fetchCurrentCity()
+    .then(function (city) {
+      // don't pass city so fetchWeather fails
+      return fetchWeather();
+    })
+    .catch(error => multiDone());
+
+});
+
 test("life is full of async, nesting is inevitable, let's do something about it", function (done) {
 
   fetchCurrentCity()
-    .then(fetchWeather)
-    .then(printTheWeather);
-
-  function printTheWeather(weather) {
-    console.log(weather);
-    done();
-  }
+    .then(function (city) {
+      return fetchWeather(city);
+    })
+    .then(weather => done());
 
 });
 
