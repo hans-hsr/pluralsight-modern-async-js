@@ -319,10 +319,6 @@ test("error recovery", function (done) {
     })
     .then(function (city) {
       expect(city).toBe("default city");
-      return fetchWeather(city);
-    })
-    .then(function (weather) {
-      console.log(weather);
       done();
     });
 
@@ -336,10 +332,6 @@ test("error recovery bypassed if not needed", function (done) {
     })
     .then(function (city) {
       expect(city).toNotBe("default city");
-      return fetchWeather(city);
-    })
-    .then(function (weather) {
-      console.log(weather);
       done();
     });
 
