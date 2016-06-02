@@ -398,29 +398,51 @@ test("error fallthrough", function (done) {
 });
 
 
+test("promises meet generators", function () {
+
+  function* calendar(contractProcess) {
+
+  }
+
+  function reminder(message, when) {
+    // note: when is ignored but you can imagine!
+    return new Promise(function (resolve, reject) {
+      doLater(() => resolve(message));
+    });
+  }
+
+  function* contract() {
+
+    yield reminder("Start the contract", "monday");
+
+    const document = {
+      verbiage: "blah blah blah",
+      id: "TBD"
+    };
+    sendEmail("Jane can you get me such and such ID, thanks");
+    yield reminder("Check for id email response", "tuesday");
+
+    checkEmail();
+    yield reminder("Fill in id and send to Dan", "wednesday");
+
+    document.id =getIdFromEmail();
+    sendEmail(document, "Dan please sign and return, thanks");
+    yield reminder("Hear back from Dan", "friday");
+
+  }
+
+  calendar(contract());
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+});
 
 
 test("promises still have undesirable aspects", function () {
 
   /*const city = fetchCurrentCity();
-  const weather = fetchWeather(city);
-  expect(`The weather is ${weather.temp}`)
-    .toBe("The weather is 50");*/
+   const weather = fetchWeather(city);
+   expect(`The weather is ${weather.temp}`)
+   .toBe("The weather is 50");*/
 
   let City;
   return fetchCurrentCity()
@@ -434,27 +456,6 @@ test("promises still have undesirable aspects", function () {
     });
 
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 test("reusing error handlers - errors anywhere!", function (done) {
